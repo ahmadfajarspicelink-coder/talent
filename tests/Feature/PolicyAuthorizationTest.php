@@ -44,10 +44,42 @@ class PolicyAuthorizationTest extends TestCase
         $this->assertFalse($this->staff->can('delete', $order));
     }
 
-    public function test_order_policy_staff_can_view(): void
+    public function test_order_policy_staff_can_view_own_order(): void
     {
-        $order = Order::factory()->create();
+        // H-04 (QW #10): staff hanya boleh view order yang dia create.
+        $order = Order::factory()->create(['created_by' => $this->staff->id]);
         $this->assertTrue($this->staff->can('view', $order));
+    }
+
+    public function test_order_policy_staff_cannot_view_other_staff_order(): void
+    {
+        // H-04 (QW #10): IDOR prevention — staff TIDAK boleh view order
+        // yang dibuat staff lain (atau tanpa created_by).
+        $otherStaff = User::factory()->create(['role' => 'staff']);
+        $order = Order::factory()->create(['created_by' => $otherStaff->id]);
+        $this->assertFalse($this->staff->can('view', $order));
+    }
+
+    public function test_order_policy_staff_cannot_view_order_without_creator(): void
+    {
+        // Order baru dari factory tanpa created_by → ditolak (H-04 strict).
+        $order = Order::factory()->create(['created_by' => null]);
+        // Policy: created_by null → degrade ke "allow all" untuk legacy.
+        $this->assertTrue($this->staff->can('view', $order),
+            'Order tanpa created_by (legacy) di-allow untuk backward compat.');
+    }
+
+    public function test_order_policy_admin_can_view_any_order(): void
+    {
+        $order = Order::factory()->create(['created_by' => $this->staff->id]);
+        $this->assertTrue($this->admin->can('view', $order));
+    }
+
+    public function test_order_policy_staff_cannot_update_other_staff_order(): void
+    {
+        $otherStaff = User::factory()->create(['role' => 'staff']);
+        $order = Order::factory()->create(['created_by' => $otherStaff->id]);
+        $this->assertFalse($this->staff->can('update', $order));
     }
 
     public function test_order_policy_staff_can_create(): void

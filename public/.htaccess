@@ -1,3 +1,10 @@
+# Security: disable directory listing globally (C-03 — QW #7).
+# Letakkan di top-level <IfModule> agar tetap aktif meskipun mod_negotiation
+# tidak di-load. Direktori /storage/ sebelumnya expose index of order docs.
+<IfModule mod_autoindex.c>
+    Options -Indexes
+</IfModule>
+
 # Static asset caching (non-hashed files like favicon, images in public/)
 <IfModule mod_headers.c>
     <FilesMatch "\.(ico|png|jpg|jpeg|gif|webp|svg|woff2?|ttf|eot)$">

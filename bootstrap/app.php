@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureModuleAccess;
+use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetCacheHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -16,6 +17,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // Cache-Control headers untuk HTML/JSON responses.
         // Dipasang global agar konsisten di semua route.
         $middleware->append(SetCacheHeaders::class);
+
+        // Security headers (H-01): X-Frame-Options, CSP, HSTS, nosniff, dll.
+        // Dipasang global sebelum SetCacheHeaders agar response yang sudah
+        // ada cache headers masih punya security headers.
+        $middleware->append(SecurityHeaders::class);
 
         // Alias middleware kontrol akses berbasis role (R2). Dipakai pada
         // route per modul, mis. 'module:partner' (lihat routes/web.php).

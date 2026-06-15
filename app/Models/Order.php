@@ -25,6 +25,7 @@ class Order extends Model
         'parent_order_id',
         'provider_id',
         'vendor_id',
+        'created_by',  // H-04 (audit): ownership tracking
         'order_number',
         'order_type',
         'package_id',
@@ -104,6 +105,16 @@ class Order extends Model
     public function package(): BelongsTo
     {
         return $this->belongsTo(Package::class);
+    }
+
+    /**
+     * The User that created this Order (H-04 — QW #10).
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     /**

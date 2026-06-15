@@ -9,8 +9,10 @@ use App\Models\Partner;
 use App\Services\OrderStatusService;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 /**
@@ -94,6 +96,7 @@ class OrderController extends Controller
                 'client_id' => $client->id,
                 'provider_id' => $data['provider_id'],
                 'vendor_id' => $data['vendor_id'] ?? null,
+                'created_by' => Auth::id(),  // H-04 (audit): ownership tracking
                 'note' => ($note === '') ? null : $note,
                 'status' => $initialStatus,
             ]);
@@ -163,6 +166,8 @@ class OrderController extends Controller
      */
     public function show(Order $order): View
     {
+        $this->authorize('view', $order);
+
         $order->load([
             'client',
             'provider',
@@ -200,6 +205,8 @@ class OrderController extends Controller
      */
     public function advanceStatus(Request $request, Order $order): RedirectResponse
     {
+        $this->authorize('update', $order);
+
         $statusService = app(OrderStatusService::class);
 
         $current = $order->status;
@@ -211,8 +218,20 @@ class OrderController extends Controller
                 ->with('error', 'Order sudah selesai');
         }
 
+        // Validasi DULU input 'status'/'target' (mencegah bypass: kosong/null
+        // string yang lolos ke canTransition()). Hanya status yang sah yang
+        // boleh diterima; nilai invalid → redirect back dengan error.
+        $validatedTarget = $request->validate([
+            'status' => ['nullable', 'string', Rule::in(OrderStatusService::STATUSES)],
+            'target' => ['nullable', 'string', Rule::in(OrderStatusService::STATUSES)],
+        ], [
+            'status.in' => 'status tidak valid',
+            'target.in' => 'target tidak valid',
+        ]);
+
         // Target dari input ('status'/'target') atau hitung penerus langsung.
-        $target = $request->input('status', $request->input('target'))
+        $target = $validatedTarget['status']
+            ?? $validatedTarget['target']
             ?? $statusService->nextStatus($current);
 
         // Transisi harus mengikuti urutan: hanya penerus langsung yang sah.
@@ -223,17 +242,23 @@ class OrderController extends Controller
         }
 
         // Validasi: dokumen opsional + field wajib khusus tahap tujuan.
+        // H-06 (audit): pakai `mimes:` (extension check) + `mimetypes:`
+        // (content-based magic byte sniff). `mimes` saja bisa di-bypass
+        // dengan rename .php → .docx jika Apache salah config. `mimetypes`
+        // inspect actual file content via PHP finfo.
         $rules = array_merge([
             'document' => [
                 'nullable',
                 'file',
                 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png',
+                'mimetypes:application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png',
                 'max:10240',
             ],
         ], $this->stageFieldRules($target));
 
         $validated = $request->validate($rules, [
             'document.mimes' => 'Dokumen harus berformat pdf, doc, docx, xls, xlsx, jpg, atau png.',
+            'document.mimetypes' => 'Konten dokumen tidak sesuai ekstensi file (kemungkinan file berisi executable).',
             'document.max' => 'Ukuran dokumen maksimal 10 MB.',
             'offer_number.required' => 'Nomor penawaran wajib diisi.',
             'po_provider_number.required' => 'Nomor PO provider wajib diisi.',

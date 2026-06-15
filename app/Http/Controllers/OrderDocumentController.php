@@ -105,6 +105,8 @@ class OrderDocumentController extends Controller
      */
     public function store(Request $request, Order $order): RedirectResponse
     {
+        $this->authorize('update', $order);
+
         $statusService = app(OrderStatusService::class);
 
         $validated = $request->validate([
@@ -113,11 +115,13 @@ class OrderDocumentController extends Controller
                 'nullable',
                 'file',
                 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png',
+                'mimetypes:application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png',
                 'max:10240',
             ],
             'note' => ['nullable', 'string', 'max:255'],
         ], [
             'document.mimes' => 'Dokumen harus berformat pdf, doc, docx, xls, xlsx, jpg, atau png.',
+            'document.mimetypes' => 'Konten dokumen tidak sesuai ekstensi file (kemungkinan file berisi executable).',
             'document.max' => 'Ukuran dokumen maksimal 10 MB.',
         ]);
 
