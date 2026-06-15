@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* NovaSpark base layer */
+@layer base {
+    body {
+        background-color: #F8FAFC; /* Nova Light */
+        color: #111827; /* Gray 900 */
+    }
+}
+
+@layer components {
+    /* Reusable card per NovaSpark spec */
+    .nova-card {
+        @apply bg-white border border-gray-200 rounded-xl shadow-nova-md transition duration-200;
+    }
+
+    .nova-card-hover:hover {
+        @apply shadow-nova-lg -translate-y-0.5;
+    }
+
+    /* Sidebar navigation item */
+    .nova-nav-item {
+        @apply flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-gray-600 transition duration-150 hover:bg-gray-100 hover:text-gray-900;
+    }
+
+    .nova-nav-item-active {
+        @apply bg-blue-50 text-blue-700 border-l-[3px] border-blue-600;
+    }
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+/* =========================================================================
+   UI/UX Pro Max checklist compliance — global defaults
+   ========================================================================= */
+/* All clickable elements get cursor:pointer by default */
+button:not(:disabled),
+a[href],
+[role="button"],
+label[for] {
+    cursor: pointer;
+}
+button:disabled {
+    cursor: not-allowed;
+}
+
+/* Smooth transitions on common interactive properties (applied via utility) */
+.transition-nova {
+    transition-property: color, background-color, border-color, fill, stroke, opacity, box-shadow, transform;
+    transition-duration: 200ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Accessibility: text-gray-400 in light mode is #9CA3AF (3.6:1 ratio, fails
+   WCAG AA 4.5:1). Bump to #6B7280 (gray-500, 4.83:1 ratio) globally. */
+.text-gray-400 { color: #6B7280; }
+.text-gray-300 { color: #9CA3AF; } /* gray-400 fallback, used for placeholders */
+
+/* Pengaman: pastikan tabel tetap berperilaku tabel (baris menurun ke bawah),
+   menimpa kemungkinan aturan global yang membuat baris tersusun mendatar. */
+table.ts-table { display: table !important; width: 100%; }
+table.ts-table > thead { display: table-header-group !important; }
+table.ts-table > tbody { display: table-row-group !important; }
+table.ts-table > thead > tr,
+table.ts-table > tbody > tr { display: table-row !important; }
+table.ts-table > thead > tr > th,
+table.ts-table > tbody > tr > td { display: table-cell !important; }
+
+/* =========================================================================
+   Dark mode (NovaSpark) — retrofit overrides so existing pages adapt without
+   editing every view. Mapping mengikuti DESIGN-UI.md:
+   #FFFFFF→#1E293B, page bg→#0F172A, text #111827→#F1F5F9, muted→#94A3B8,
+   border #E5E7EB→#334155.
+   ========================================================================= */
+.dark body {
+    background-color: #0F172A;
+    color: #F1F5F9;
+}
+
+/* Surfaces */
+.dark .bg-white { background-color: #1E293B; }
+.dark .bg-gray-50,
+.dark .bg-slate-50,
+.dark .bg-nova-light { background-color: #0F172A; }
+.dark .bg-gray-100 { background-color: #334155; }
+.dark .bg-gray-200 { background-color: #334155; }
+
+/* Translucent top bar */
+.dark .bg-white\/90 { background-color: rgba(15, 23, 42, 0.9); }
+
+/* Text */
+.dark .text-gray-900,
+.dark .text-nova-dark { color: #F1F5F9; }
+.dark .text-gray-800 { color: #E2E8F0; }
+.dark .text-gray-700 { color: #CBD5E1; }
+.dark .text-gray-600,
+.dark .text-gray-500 { color: #94A3B8; }
+.dark .text-gray-400 { color: #64748B; }
+
+/* Borders & dividers */
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-gray-300 { border-color: #334155; }
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #334155; }
+
+/* Form controls */
+.dark input,
+.dark select,
+.dark textarea {
+    background-color: #0F172A;
+    border-color: #334155;
+    color: #F1F5F9;
+}
+.dark input::placeholder,
+.dark textarea::placeholder { color: #64748B; }
+
+/* Row hover */
+.dark .hover\:bg-gray-50:hover { background-color: #334155; }
+
+/* Sidebar nav in dark */
+.dark .nova-nav-item { color: #CBD5E1; }
+.dark .nova-nav-item:hover { background-color: #334155; color: #F1F5F9; }
+.dark .nova-nav-item-active {
+    background-color: rgba(37, 99, 235, 0.18);
+    color: #93C5FD;
+}
+
+/* Mobile overlay slightly darker */
+.dark .bg-nova-dark\/50 { background-color: rgba(0, 0, 0, 0.6); }
+
+/* =========================================================================
+   Status badge & accent colors — dark mode overrides
+   ========================================================================= */
+/* Badge backgrounds */
+.dark .bg-blue-50 { background-color: rgba(37, 99, 235, 0.15); }
+.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.15); }
+.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.15); }
+.dark .bg-amber-50,
+.dark .bg-yellow-50 { background-color: rgba(245, 158, 11, 0.15); }
+
+/* Accent text colors — keep vivid on dark bg */
+.dark .text-blue-600 { color: #60A5FA; }
+.dark .text-emerald-600 { color: #34D399; }
+.dark .text-red-600 { color: #F87171; }
+.dark .text-amber-600 { color: #FBBF24; }
+.dark .text-yellow-600 { color: #FBBF24; }
+
+/* Status badge text */
+.dark .text-emerald-700 { color: #34D399; }
+.dark .text-red-700 { color: #F87171; }
+.dark .text-amber-700 { color: #FBBF24; }
+
+/* Nova card border overrides in dark (for colored borders) */
+.dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.3); }
+.dark .border-emerald-200 { border-color: rgba(16, 185, 129, 0.3); }
+.dark .border-red-200 { border-color: rgba(239, 68, 68, 0.3); }
+
+/* Hover on accent link */
+.dark .hover\:text-blue-700:hover { color: #93C5FD; }
