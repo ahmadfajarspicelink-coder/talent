@@ -3,10 +3,12 @@
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FinanceController;
+use App\Http\Controllers\LogdownInstallController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\BastController;
 use App\Http\Controllers\OrderDocumentController;
 use App\Http\Controllers\PackageController;
+use App\Http\Controllers\LogdownController;
 use App\Http\Controllers\PartnerController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserController;
@@ -99,6 +101,24 @@ Route::middleware(['auth', 'module:network'])->group(function () {
     Route::get('/network/top-traffic', \App\Livewire\TopTraffic::class)->name('network.top-traffic');
     Route::get('/network/devices', \App\Livewire\DeviceManager::class)->name('network.devices');
     Route::get('/network/devices/{id}', \App\Livewire\DeviceDetail::class)->name('network.device-detail');
+});
+
+// Modul_Ticket → sub-modul Logdown — admin & staff.
+// Mencatat downtime client aktif: vendor, waktu down, waktu up, durasi,
+// reason, dan action. Durasi dihitung otomatis dari selisih waktu.
+Route::middleware(['auth', 'module:ticket'])->group(function () {
+    Route::get('/tickets/logdown', [LogdownController::class, 'index'])->name('logdown.index');
+    Route::post('/tickets/logdown', [LogdownController::class, 'store'])->name('logdown.store');
+    Route::match(['put', 'patch'], '/tickets/logdown/{logdown}', [LogdownController::class, 'update'])->name('logdown.update');
+    Route::post('/tickets/logdown/{logdown}/resolve', [LogdownController::class, 'resolve'])->name('logdown.resolve');
+    Route::delete('/tickets/logdown/{logdown}', [LogdownController::class, 'destroy'])->name('logdown.destroy');
+
+    // Endpoint one-time: jalankan migration tabel downtime_logs via browser
+    // (pengganti `php artisan migrate` bila PHP CLI tidak tersedia di
+    // terminal). Hanya admin. Aman dipanggil berulang — Schema::create
+    // di-skip bila tabel sudah ada.
+    Route::get('/tickets/install', [LogdownInstallController::class, 'install'])
+        ->name('logdown.install');
 });
 
 require __DIR__.'/auth.php';

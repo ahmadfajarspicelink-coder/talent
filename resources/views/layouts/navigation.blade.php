@@ -43,6 +43,12 @@
                         </x-nav-link>
                     @endif
 
+                    @if(in_array('ticket', $allowed))
+                        <x-nav-link :href="route('logdown.index')" :active="request()->routeIs('logdown.*')">
+                            {{ __('Ticket') }}
+                        </x-nav-link>
+                    @endif
+
                     @if(in_array('user_management', $allowed))
                         <x-nav-link :href="route('users.index')" :active="request()->routeIs('users.*')">
                             {{ __('User Management') }}
@@ -125,6 +131,12 @@
             @if(in_array('finance', $allowed))
                 <x-responsive-nav-link :href="route('finance.orders')" :active="request()->routeIs('finance.*')">
                     {{ __('Finance') }}
+                </x-responsive-nav-link>
+            @endif
+
+            @if(in_array('ticket', $allowed))
+                <x-responsive-nav-link :href="route('logdown.index')" :active="request()->routeIs('logdown.*')">
+                    {{ __('Ticket') }}
                 </x-responsive-nav-link>
             @endif
 

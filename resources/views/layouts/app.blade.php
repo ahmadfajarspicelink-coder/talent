@@ -44,6 +44,15 @@
                     'icon' => 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z'],
                 ['module' => 'finance', 'route' => 'finance.orders', 'pattern' => 'finance.*', 'label' => 'Finance',
                     'icon' => 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'],
+                [
+                    'module' => 'ticket',
+                    'label' => 'Ticket',
+                    'icon' => 'M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a2.999 2.999 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z',
+                    'children' => [
+                        ['module' => 'ticket', 'route' => 'logdown.index', 'pattern' => 'logdown.*', 'label' => 'Logdown',
+                            'icon' => 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z'],
+                    ],
+                ],
                 ['module' => 'user_management', 'route' => 'users.index', 'pattern' => 'users.*', 'label' => 'User Management',
                     'icon' => 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z'],
                 ['module' => 'network', 'route' => 'network.index', 'pattern' => 'network.*', 'label' => 'Network',
@@ -76,14 +85,57 @@
                 <nav class="flex-1 space-y-1 overflow-y-auto px-3 py-4">
                     @foreach ($nav as $item)
                         @continue($item['module'] !== null && ! in_array($item['module'], $allowed))
-                        @php($active = request()->routeIs($item['pattern']))
-                        <a href="{{ route($item['route']) }}"
-                            class="nova-nav-item {{ $active ? 'nova-nav-item-active' : '' }}">
-                            <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="{{ $item['icon'] }}" />
-                            </svg>
-                            <span>{{ __($item['label']) }}</span>
-                        </a>
+
+                        @if (! empty($item['children']))
+                            {{-- Parent dengan sub-menu (collapsible) --}}
+                            @php
+                                $hasActiveChild = false;
+                                foreach ($item['children'] as $child) {
+                                    if (request()->routeIs($child['pattern'])) {
+                                        $hasActiveChild = true;
+                                        break;
+                                    }
+                                }
+                            @endphp
+                            <div x-data="{ open: {{ $hasActiveChild ? 'true' : 'false' }} }">
+                                <button type="button" @click="open = ! open"
+                                    class="nova-nav-item w-full {{ $hasActiveChild ? 'nova-nav-item-active' : '' }}">
+                                    <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="{{ $item['icon'] }}" />
+                                    </svg>
+                                    <span class="flex-1 text-left">{{ __($item['label']) }}</span>
+                                    <svg class="h-4 w-4 shrink-0 transition-transform duration-200"
+                                        :class="open ? 'rotate-180' : ''"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                                    </svg>
+                                </button>
+                                <div x-show="open" x-transition.duration.200ms
+                                    class="ml-3 mt-1 space-y-1 border-l border-gray-200 pl-3">
+                                    @foreach ($item['children'] as $child)
+                                        @continue($child['module'] !== null && ! in_array($child['module'], $allowed))
+                                        @php($childActive = request()->routeIs($child['pattern']))
+                                        <a href="{{ route($child['route']) }}"
+                                            class="nova-nav-item {{ $childActive ? 'nova-nav-item-active' : '' }}">
+                                            <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="{{ $child['icon'] }}" />
+                                            </svg>
+                                            <span>{{ __($child['label']) }}</span>
+                                        </a>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @else
+                            {{-- Item tunggal biasa --}}
+                            @php($active = request()->routeIs($item['pattern']))
+                            <a href="{{ route($item['route']) }}"
+                                class="nova-nav-item {{ $active ? 'nova-nav-item-active' : '' }}">
+                                <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="{{ $item['icon'] }}" />
+                                </svg>
+                                <span>{{ __($item['label']) }}</span>
+                            </a>
+                        @endif
                     @endforeach
                 </nav>
 

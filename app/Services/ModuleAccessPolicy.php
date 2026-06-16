@@ -10,8 +10,8 @@ namespace App\Services;
  * menentukan apakah sebuah role boleh mengakses modul tertentu.
  *
  * Pemetaan tetap:
- *   admin -> [partner, order, client, finance, user_management]
- *   staff -> [order, partner]
+ *   admin -> [partner, order, client, finance, user_management, ticket, ...]
+ *   staff -> [order, partner, ticket, ...]
  *
  * Role yang tidak dikenal diperlakukan sebagai tanpa akses (daftar kosong).
  */
@@ -23,8 +23,8 @@ class ModuleAccessPolicy
      * @var array<string, array<int, string>>
      */
     private const ALLOWED = [
-        'admin' => ['partner', 'order', 'client', 'finance', 'user_management', 'package', 'network'],
-        'staff' => ['order', 'partner', 'network'],
+        'admin' => ['partner', 'order', 'client', 'finance', 'user_management', 'package', 'network', 'ticket'],
+        'staff' => ['order', 'partner', 'network', 'ticket'],
     ];
 
     /**
