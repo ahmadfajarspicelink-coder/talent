@@ -6,6 +6,7 @@ use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\LogdownInstallController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\BastController;
+use App\Http\Controllers\TrackingClientController;
 use App\Http\Controllers\OrderDocumentController;
 use App\Http\Controllers\PackageController;
 use App\Http\Controllers\LogdownController;
@@ -50,6 +51,8 @@ Route::middleware(['auth', 'module:partner'])->group(function () {
 // dan baru tampil setelah Order-nya Complete (tidak ada tambah/edit manual).
 Route::middleware(['auth', 'module:client'])->group(function () {
     Route::get('/clients', [ClientController::class, 'index'])->name('clients.index');
+    // Tracking Client — view-only riwayat lengkap (order, logdown, upgrade, dismantle).
+    Route::get('/clients/{client}/tracking', [TrackingClientController::class, 'show'])->name('clients.tracking');
     Route::post('/clients/{client}/upgrade', [ClientController::class, 'upgrade'])->name('clients.upgrade');
     Route::post('/clients/{client}/dismantle', [ClientController::class, 'dismantle'])->name('clients.dismantle');
 });
