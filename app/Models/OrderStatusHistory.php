@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class OrderStatusHistory extends Model
 {
@@ -26,8 +26,6 @@ class OrderStatusHistory extends Model
     protected $fillable = [
         'order_id',
         'status',
-        'document_path',
-        'document_name',
         'note',
         'changed_at',
     ];
@@ -55,58 +53,84 @@ class OrderStatusHistory extends Model
     }
 
     /**
-     * Apakah entri riwayat ini memiliki dokumen terlampir.
+     * Dokumen-dokumen yang dilampirkan pada entri riwayat ini.
+     *
+     * Satu tahap (history) dapat memiliki banyak OrderDocument — lihat
+     * App\Models\OrderDocument. Batas "maks 5 dokumen per tahap" ditegakkan
+     * di OrderDocumentController::store.
+     *
+     * @return HasMany<OrderDocument, $this>
+     */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(OrderDocument::class)->orderBy('id');
+    }
+
+    /**
+     * Apakah entri riwayat ini memiliki setidaknya satu dokumen terlampir.
      */
     public function hasDocument(): bool
     {
-        return ! empty($this->document_path);
+        return $this->documents()->exists();
     }
 
     /**
-     * URL publik dokumen terlampir (atau null jika tidak ada).
+     * Banyaknya dokumen terlampir.
+     */
+    public function getDocumentsCountAttribute(): int
+    {
+        return $this->documents()->count();
+    }
+
+    /**
+     * Untuk backward-compat dengan view lama: URL dokumen pertama (atau null).
      */
     public function getDocumentUrlAttribute(): ?string
     {
-        return $this->document_path
-            ? Storage::disk('public')->url($this->document_path)
-            : null;
+        $first = $this->documents()->first();
+
+        return $first?->document_url;
     }
 
     /**
-     * Ekstensi file dokumen (lowercase), atau null jika tidak ada dokumen.
+     * Untuk backward-compat dengan view lama: nama dokumen pertama (atau null).
+     */
+    public function getDocumentNameAttribute(): ?string
+    {
+        return $this->documents()->first()?->document_name;
+    }
+
+    /**
+     * Untuk backward-compat dengan view lama: path dokumen pertama (atau null).
+     */
+    public function getDocumentPathAttribute(): ?string
+    {
+        return $this->documents()->first()?->document_path;
+    }
+
+    /**
+     * Ekstensi dokumen pertama — dipakai view lama (OrderController::show,
+     * TrackingClientController) yang merender 1 dokumen per tahap. Tetap
+     * dipertahankan untuk kompatibilitas; UI multi-dokumen sebaiknya
+     * iterasi $history->documents langsung.
      */
     public function documentExtension(): ?string
     {
-        if (! $this->hasDocument()) {
-            return null;
-        }
-
-        $name = $this->document_name ?: $this->document_path;
-
-        return strtolower(pathinfo($name, PATHINFO_EXTENSION)) ?: null;
+        return $this->documents()->first()?->documentExtension();
     }
 
-    /**
-     * Apakah dokumen berupa PDF (dapat ditampilkan di viewer browser).
-     */
     public function isPdf(): bool
     {
-        return $this->documentExtension() === 'pdf';
+        return $this->documents()->first()?->isPdf() ?? false;
     }
 
-    /**
-     * Apakah dokumen berupa gambar (dapat ditampilkan langsung).
-     */
     public function isImage(): bool
     {
-        return in_array($this->documentExtension(), ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'], true);
+        return $this->documents()->first()?->isImage() ?? false;
     }
 
-    /**
-     * Apakah dokumen dapat dipratinjau langsung di browser (PDF atau gambar).
-     */
     public function isPreviewable(): bool
     {
-        return $this->isPdf() || $this->isImage();
+        return $this->documents()->first()?->isPreviewable() ?? false;
     }
 }

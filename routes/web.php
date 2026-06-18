@@ -73,10 +73,15 @@ Route::middleware(['auth', 'module:order'])->group(function () {
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::post('/orders/{order}/advance', [OrderController::class, 'advanceStatus'])->name('orders.advanceStatus');
     Route::delete('/orders/{order}', [OrderController::class, 'destroy'])->name('orders.destroy');
+
+    // Dokumen Order — parameter {document} = OrderDocument (bukan lagi
+    // OrderStatusHistory). Setiap OrderDocument adalah 1 berkas; satu
+    // tahap dapat memiliki banyak dokumen (maks 5 × 5 MB — ditegakkan di
+    // OrderDocumentController::store).
     Route::post('/orders/{order}/documents', [OrderDocumentController::class, 'store'])->name('orders.documents.store');
-    Route::delete('/orders/{order}/histories/{history}/document', [OrderDocumentController::class, 'destroy'])->name('orders.documents.destroy');
-    Route::get('/orders/{order}/histories/{history}/document', [OrderDocumentController::class, 'preview'])->name('orders.documents.preview');
-    Route::get('/orders/{order}/histories/{history}/document/raw', [OrderDocumentController::class, 'raw'])->name('orders.documents.raw');
+    Route::delete('/orders/{order}/documents/{document}', [OrderDocumentController::class, 'destroy'])->name('orders.documents.destroy');
+    Route::get('/orders/{order}/documents/{document}', [OrderDocumentController::class, 'preview'])->name('orders.documents.preview');
+    Route::get('/orders/{order}/documents/{document}/raw', [OrderDocumentController::class, 'raw'])->name('orders.documents.raw');
 
     // BAST Module
     Route::post('/orders/{order}/bast/generate', [BastController::class, 'generate'])->name('orders.bast.generate');

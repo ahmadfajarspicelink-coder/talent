@@ -5,6 +5,8 @@
 --}}
 @php($inputClass = 'mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500')
 @php($labelClass = 'block text-xs font-medium text-gray-600')
+@php($maxDocs = 5)
+@php($maxMb = 5)
 
 @switch($stage)
     @case('Penawaran')
@@ -117,10 +119,16 @@
         <p class="text-xs text-gray-500 dark:text-slate-400">{{ __('Tidak ada data yang perlu diisi. Klik "Tandai Selesai" untuk melanjutkan.') }}</p>
 @endswitch
 
-{{-- Dokumen pendukung opsional untuk tahap ini --}}
+{{-- Dokumen pendukung opsional (multi-upload) untuk tahap ini.
+    Batas: maksimal {{ $maxDocs }} berkas, masing-masing ≤ {{ $maxMb }} MB.
+    Berkas diunggah via OrderController::advanceStatus (saat "Tandai Selesai")
+    atau via OrderDocumentController::store (saat "Upload dokumen" saja). --}}
 <div class="mt-3">
-    <label class="{{ $labelClass }}">{{ __('Dokumen (opsional)') }}</label>
-    <input name="document" type="file"
+    <label class="{{ $labelClass }}">{{ __('Dokumen pendukung (opsional, maks :maxDocs × :maxMb MB)', ['maxDocs' => $maxDocs, 'maxMb' => $maxMb]) }}</label>
+    <input name="documents[]" type="file" multiple
         accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+        data-multi-doc
         class="mt-1 text-xs text-gray-600 dark:text-slate-400 file:mr-2 file:rounded file:border-0 file:bg-gray-100 file:px-2 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-200" />
+    <x-input-error :messages="$errors->get('documents')" class="mt-1" />
+    <x-input-error :messages="$errors->get('documents.*')" class="mt-1" />
 </div>

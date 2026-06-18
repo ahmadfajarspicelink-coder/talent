@@ -8,6 +8,10 @@
 
     Kanan: panel ringkas yang terisi otomatis dari data tahap — Detail Order,
     Kontrak Client, dan Harga & Margin.
+
+    Dokumen: setiap OrderStatusHistory dapat memiliki banyak OrderDocument
+    (maks 5 × 5 MB). Daftar dokumen ditampilkan per tahap dengan tombol
+    pratinjau & hapus individu; form upload menerima multi-file.
 --}}
 <x-app-layout>
     <x-slot name="header">
@@ -26,6 +30,8 @@
     </x-slot>
 
     @php($currentIndex = $statusService->indexOf($order->status))
+    @php($maxUploadMb = 5)
+    @php($maxDocuments = 5)
 
     <div class="py-8">
         <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
@@ -71,7 +77,7 @@
                                 @php($isCurrent = $i === $currentIndex)
                                 @php($isNext = $i === $currentIndex + 1)
                                 @php($isReached = $i <= $currentIndex)
-                                @php($doc = $documentsByStatus[$stage] ?? null)
+                                @php($history = $statusHistories->where('status', $stage)->sortByDesc('id')->first())
 
                                 <div class="rounded-lg border p-4
                                     @if ($isDone) border-green-200 bg-green-50/40 dark:border-green-800 dark:bg-green-950/30
@@ -107,43 +113,68 @@
                                                 @include('orders.partials.stage-summary', ['order' => $order, 'stage' => $stage])
                                             @endif
 
-                                            {{-- Dokumen terlampir --}}
-                                            @if ($doc)
-                                                <div class="mt-2 flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
-                                                    <a href="{{ route('orders.documents.preview', [$order, $doc]) }}"
-                                                        class="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-indigo-700 hover:underline truncate dark:text-slate-200 dark:hover:text-indigo-400">
-                                                        <svg class="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                                                        </svg>
-                                                        <span class="truncate">{{ $doc->document_name ?? __('dokumen') }}</span>
-                                                    </a>
-                                                    <form method="POST" action="{{ route('orders.documents.destroy', [$order, $doc]) }}"
-                                                        onsubmit="return confirm('{{ __('Hapus dokumen ini?') }}');">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button type="submit" class="ml-3 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300" title="{{ __('Hapus') }}">
-                                                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                                            </svg>
-                                                        </button>
-                                                    </form>
+                                            {{-- Daftar dokumen terlampir (multi) --}}
+                                            @if ($history && $history->documents->count() > 0)
+                                                <div class="mt-2 space-y-1">
+                                                    @php($docCount = $history->documents->count())
+                                                    <p class="text-xs text-gray-500 dark:text-slate-400">
+                                                        {{ __('Dokumen terlampir (:count/:max)', ['count' => $docCount, 'max' => $maxDocuments]) }}
+                                                    </p>
+                                                    @foreach ($history->documents as $doc)
+                                                        <div class="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900/50">
+                                                            <a href="{{ route('orders.documents.preview', [$order, $doc]) }}"
+                                                                class="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-indigo-700 hover:underline truncate dark:text-slate-200 dark:hover:text-indigo-400">
+                                                                <svg class="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                                                </svg>
+                                                                <span class="truncate">{{ $doc->document_name ?? __('dokumen') }}</span>
+                                                                <span class="ml-1 text-xs uppercase text-gray-400 dark:text-slate-500">{{ $doc->documentExtension() }}</span>
+                                                                @if ($doc->size)
+                                                                    <span class="ml-1 text-xs text-gray-400 dark:text-slate-500">{{ $doc->size_mb }} MB</span>
+                                                                @endif
+                                                            </a>
+                                                            <form method="POST" action="{{ route('orders.documents.destroy', [$order, $doc]) }}"
+                                                                onsubmit="return confirm('{{ __('Hapus dokumen ini?') }}');">
+                                                                @csrf
+                                                                @method('DELETE')
+                                                                <button type="submit" class="ml-3 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300" title="{{ __('Hapus') }}">
+                                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                                                    </svg>
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    @endforeach
                                                 </div>
                                             @endif
 
-                                            {{-- Upload dokumen (tahap yang sudah tercapai) --}}
+                                            {{-- Upload dokumen (tahap yang sudah tercapai, selama belum penuh) --}}
                                             @if ($isReached)
-                                                <form method="POST" action="{{ route('orders.documents.store', $order) }}"
-                                                    enctype="multipart/form-data" class="mt-2 flex flex-wrap items-center gap-2">
-                                                    @csrf
-                                                    <input type="hidden" name="status" value="{{ $stage }}" />
-                                                    <label class="sr-only" for="document-{{ $stage }}">Dokumen</label>
-                                                    <input id="document-{{ $stage }}" name="document" type="file" required
-                                                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                                                        class="text-xs text-gray-600 file:mr-2 file:rounded file:border-0 file:bg-gray-100 file:px-2 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-200 dark:text-slate-400 file:dark:bg-slate-700 file:dark:text-slate-200 hover:file:dark:bg-slate-600" />
-                                                    <button type="submit" class="text-xs font-medium text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">
-                                                        {{ $doc ? __('Ganti dokumen') : __('Upload dokumen') }}
-                                                    </button>
-                                                </form>
+                                                @php($existingDocs = $history ? $history->documents->count() : 0)
+                                                @if ($existingDocs < $maxDocuments)
+                                                    <form method="POST" action="{{ route('orders.documents.store', $order) }}"
+                                                        enctype="multipart/form-data" class="mt-2 flex flex-wrap items-center gap-2"
+                                                        data-multi-upload
+                                                        data-existing="{{ $existingDocs }}"
+                                                        data-max="{{ $maxDocuments }}">
+                                                        @csrf
+                                                        <input type="hidden" name="status" value="{{ $stage }}" />
+                                                        <label class="sr-only" for="documents-{{ $stage }}">Dokumen</label>
+                                                        <input id="documents-{{ $stage }}" name="documents[]" type="file" multiple
+                                                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                                                            class="text-xs text-gray-600 file:mr-2 file:rounded file:border-0 file:bg-gray-100 file:px-2 file:py-1 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-200 dark:text-slate-400 file:dark:bg-slate-700 file:dark:text-slate-200 hover:file:dark:bg-slate-600" />
+                                                        <button type="submit" class="text-xs font-medium text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300">
+                                                            {{ $existingDocs > 0 ? __('Tambah dokumen') : __('Upload dokumen') }}
+                                                        </button>
+                                                        <p class="w-full text-[11px] text-gray-400 dark:text-slate-500">
+                                                            {{ __('Maks :maxDocs × :maxMb MB. Sisa slot: :remaining', ['maxDocs' => $maxDocuments, 'maxMb' => $maxUploadMb, 'remaining' => $maxDocuments - $existingDocs]) }}
+                                                        </p>
+                                                    </form>
+                                                @else
+                                                    <p class="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+                                                        {{ __('Batas :max dokumen untuk tahap ini sudah tercapai. Hapus salah satu untuk menambah.', ['max' => $maxDocuments]) }}
+                                                    </p>
+                                                @endif
                                             @endif
 
                                             {{-- Form penyelesaian tahap berikutnya --}}
@@ -206,11 +237,15 @@
         </div>
     </div>
 
-    {{-- Validasi ukuran dokumen di sisi klien (batas aplikasi 10 MB). --}}
+    {{-- Validasi ukuran & jumlah dokumen di sisi klien (batas aplikasi
+        5 × 5 MB). Dipakai untuk input type=file multiple dengan atribut
+        data-multi-upload (form upload khusus per tahap) maupun
+        data-multi-doc (input di dalam stage-fields). --}}
     @push('scripts')
         <script>
             (function () {
-                const MAX_MB = {{ $maxUploadMb ?? 10 }};
+                const MAX_MB = {{ $maxUploadMb }};
+                const MAX_FILES = {{ $maxDocuments }};
                 const MAX_BYTES = MAX_MB * 1024 * 1024;
                 const fmt = (b) => (b / (1024 * 1024)).toFixed(1);
 
@@ -224,20 +259,43 @@
                     return el;
                 }
 
+                function clearWarn(form) {
+                    const existing = form.querySelector('.upload-size-warning');
+                    if (existing) existing.textContent = '';
+                }
+
+                // Validasi satu input type=file (single atau multi).
                 function check(input) {
                     const form = input.closest('form');
                     if (!form) return true;
-                    const file = input.files && input.files[0];
-                    const existing = form.querySelector('.upload-size-warning');
-                    if (file && file.size > MAX_BYTES) {
-                        warnEl(form).textContent = 'Ukuran dokumen ' + fmt(file.size) + ' MB melebihi batas ' + MAX_MB + ' MB. Perkecil file lalu coba lagi.';
+
+                    const files = input.files ? Array.from(input.files) : [];
+                    if (files.length === 0) {
+                        clearWarn(form);
+                        return true;
+                    }
+
+                    // Batas jumlah: existing (di atribut data-existing) + baru.
+                    const existing = parseInt(input.closest('[data-multi-upload]')?.dataset.existing || '0', 10);
+                    const maxAttr = parseInt(input.closest('[data-multi-upload]')?.dataset.max || String(MAX_FILES), 10);
+                    if (files.length + existing > maxAttr) {
+                        warnEl(form).textContent = 'Jumlah file (' + (files.length + existing) + ') melebihi batas ' + maxAttr + ' untuk tahap ini. Kelebihan: ' + (files.length + existing - maxAttr) + '.';
                         return false;
                     }
-                    if (existing) existing.textContent = '';
+
+                    // Batas ukuran per file.
+                    const tooBig = files.filter((f) => f.size > MAX_BYTES);
+                    if (tooBig.length > 0) {
+                        const names = tooBig.map((f) => f.name + ' (' + fmt(f.size) + ' MB)').join(', ');
+                        warnEl(form).textContent = 'Ukuran file melebihi batas ' + MAX_MB + ' MB: ' + names;
+                        return false;
+                    }
+
+                    clearWarn(form);
                     return true;
                 }
 
-                document.querySelectorAll('input[type="file"][name="document"]').forEach(function (input) {
+                document.querySelectorAll('input[type="file"][name="documents[]"]').forEach(function (input) {
                     input.addEventListener('change', function () { if (!check(input)) input.value = ''; });
                     const form = input.closest('form');
                     if (form) form.addEventListener('submit', function (e) { if (!check(input)) e.preventDefault(); });

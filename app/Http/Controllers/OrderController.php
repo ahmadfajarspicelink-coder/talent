@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreOrderRequest;
 use App\Models\Client;
 use App\Models\Order;
+use App\Models\OrderDocument;
 use App\Models\Partner;
 use App\Services\OrderStatusService;
 use Illuminate\Http\Request;
@@ -176,6 +177,7 @@ class OrderController extends Controller
             'parentOrder',
             'bastDocuments',
             'statusHistories' => fn ($query) => $query->orderBy('changed_at'),
+            'statusHistories.documents',
         ]);
 
         return view('orders.show', [
@@ -184,6 +186,8 @@ class OrderController extends Controller
             'documentsByStatus' => $order->statusHistories
                 ->filter(fn ($h) => $h->hasDocument())
                 ->keyBy('status'),
+            'maxUploadMb' => 5,
+            'maxDocuments' => 5,
             'statusService' => app(OrderStatusService::class),
             'packages' => \App\Models\Package::orderBy('name')->get(),
         ]);
@@ -202,6 +206,10 @@ class OrderController extends Controller
      * Saat transisi sah, Status_Order diperbarui DAN satu entri riwayat
      * (status baru + waktu perubahan) dicatat dalam satu transaksi agar
      * atomik (R6.2, R6.4).
+     *
+     * Dokumen pendukung: banyak berkas (maks 5 per tahap, masing-masing ≤ 5 MB)
+     * via input `documents[]` — disimpan ke tabel `order_documents` (lihat
+     * OrderDocument).
      */
     public function advanceStatus(Request $request, Order $order): RedirectResponse
     {
@@ -241,25 +249,28 @@ class OrderController extends Controller
                 ->with('error', 'status harus mengikuti urutan');
         }
 
-        // Validasi: dokumen opsional + field wajib khusus tahap tujuan.
-        // H-06 (audit): pakai `mimes:` (extension check) + `mimetypes:`
-        // (content-based magic byte sniff). `mimes` saja bisa di-bypass
-        // dengan rename .php → .docx jika Apache salah config. `mimetypes`
-        // inspect actual file content via PHP finfo.
+        // Validasi: multi-dokumen opsional (maks 5 × 5 MB) + field wajib
+        // khusus tahap tujuan. H-06 (audit): `mimes:` (extension check) +
+        // `mimetypes:` (content-based magic byte sniff). `mimes` saja bisa
+        // di-bypass dengan rename .php → .docx; `mimetypes` inspect actual
+        // file content via PHP finfo.
+        $maxDocs = 5;
+        $maxKb = 5120; // 5 MB
         $rules = array_merge([
-            'document' => [
-                'nullable',
+            'documents' => ['nullable', 'array', 'max:'.$maxDocs],
+            'documents.*' => [
                 'file',
                 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png',
                 'mimetypes:application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png',
-                'max:10240',
+                'max:'.$maxKb,
             ],
         ], $this->stageFieldRules($target));
 
         $validated = $request->validate($rules, [
-            'document.mimes' => 'Dokumen harus berformat pdf, doc, docx, xls, xlsx, jpg, atau png.',
-            'document.mimetypes' => 'Konten dokumen tidak sesuai ekstensi file (kemungkinan file berisi executable).',
-            'document.max' => 'Ukuran dokumen maksimal 10 MB.',
+            'documents.max' => 'Maksimal '.$maxDocs.' dokumen per tahap.',
+            'documents.*.mimes' => 'Dokumen harus berformat pdf, doc, docx, xls, xlsx, jpg, atau png.',
+            'documents.*.mimetypes' => 'Konten dokumen tidak sesuai ekstensi file (kemungkinan file berisi executable).',
+            'documents.*.max' => 'Ukuran setiap dokumen maksimal 5 MB.',
             'offer_number.required' => 'Nomor penawaran wajib diisi.',
             'po_provider_number.required' => 'Nomor PO provider wajib diisi.',
             'po_vendor_number.required' => 'Nomor PO vendor wajib diisi.',
@@ -292,16 +303,9 @@ class OrderController extends Controller
             'contract_months',
         ]));
 
-        // Simpan file ke disk publik (jika ada) sebelum transaksi DB.
-        $documentPath = null;
-        $documentName = null;
-        if ($request->hasFile('document')) {
-            $file = $request->file('document');
-            $documentName = $file->getClientOriginalName();
-            $documentPath = $file->store("order-documents/{$order->id}", 'public');
-        }
+        $files = $request->file('documents', []);
 
-        DB::transaction(function () use ($order, $target, $orderUpdates, $documentPath, $documentName, $statusService) {
+        DB::transaction(function () use ($order, $target, $orderUpdates, $files, $statusService) {
             $order->fill($orderUpdates);
 
             // Saat mencapai tahap akhir: tetapkan masa kontrak client.
@@ -314,12 +318,28 @@ class OrderController extends Controller
             $order->status = $target;
             $order->save();
 
-            $order->statusHistories()->create([
+            $history = $order->statusHistories()->create([
                 'status' => $target,
-                'document_path' => $documentPath,
-                'document_name' => $documentName,
                 'changed_at' => now(),
             ]);
+
+            // Simpan multi-dokumen ke tabel order_documents (jika ada).
+            $uploadedBy = Auth::id();
+            $directory = "order-documents/{$order->id}";
+            foreach ($files as $file) {
+                if (! $file || ! $file->isValid()) {
+                    continue;
+                }
+                $path = $file->store($directory, 'public');
+                OrderDocument::create([
+                    'order_status_history_id' => $history->id,
+                    'document_path' => $path,
+                    'document_name' => $file->getClientOriginalName(),
+                    'size' => $file->getSize() ?: 0,
+                    'mime_type' => $file->getMimeType(),
+                    'uploaded_by' => $uploadedBy,
+                ]);
+            }
         });
 
         return redirect()
@@ -368,22 +388,34 @@ class OrderController extends Controller
      * Hapus Order beserta riwayat status dan berkas dokumennya.
      *
      * Hanya Admin yang boleh menghapus Order; Staff ditolak (403). Berkas
-     * dokumen pada tiap entri riwayat ikut dihapus dari storage agar tidak
-     * meninggalkan file yatim. Seluruh proses dibungkus transaksi.
+     * dokumen pada tiap entri riwayat (relasi order_documents) ikut dihapus
+     * dari storage agar tidak meninggalkan file yatim. cascadeOnDelete pada
+     * foreign key memastikan baris order_documents ikut terhapus dari DB.
+     * Seluruh proses dibungkus transaksi.
      */
     public function destroy(Order $order): RedirectResponse
     {
         $this->authorize('delete', $order);
 
         DB::transaction(function () use ($order) {
+            // Kumpulkan semua path berkas dari seluruh dokumen terlampir
+            // sebelum menghapus histori (yang akan men-cascade order_documents).
+            $paths = [];
             foreach ($order->statusHistories as $history) {
-                if ($history->document_path) {
-                    Storage::disk('public')->delete($history->document_path);
+                foreach ($history->documents as $document) {
+                    if ($document->document_path) {
+                        $paths[] = $document->document_path;
+                    }
                 }
             }
 
-            $order->statusHistories()->delete();
+            $order->statusHistories()->delete(); // cascades ke order_documents
             $order->delete();
+
+            // Hapus fisik berkas setelah DB commit aman.
+            foreach ($paths as $path) {
+                Storage::disk('public')->delete($path);
+            }
         });
 
         return redirect()

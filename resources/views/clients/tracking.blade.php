@@ -9,6 +9,10 @@
       • Tiap event punya "spotlight" warna sesuai jenis untuk pembacaan
         sekilas (biru = order, hijau = aktif, kuning = logdown, indigo
         = upgrade, merah = dismantle / masih down).
+
+    Dokumen: setiap perubahan status Order dapat memiliki banyak
+    OrderDocument (maks 5 × 5 MB). Ditampilkan sebagai daftar link
+    pratinjau/unduh pada timeline.
 --}}
 <x-app-layout>
     <x-slot name="header">
@@ -216,15 +220,29 @@
                                                         </div>
                                                     </dl>
                                                 @elseif ($event['type'] === 'order' && $event['subtype'] === 'status_change')
-                                                    <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-slate-300">
+                                                    <div class="mt-3 text-xs text-gray-600 dark:text-slate-300">
                                                         <span class="font-mono">{{ $event['meta']['order_number'] }}</span>
-                                                        @if (!empty($event['meta']['has_document']) && !empty($event['meta']['document_url']))
-                                                            <a href="{{ $event['meta']['document_url'] }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline">
-                                                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
-                                                                {{ $event['meta']['document_name'] ?? __('Dokumen') }}
-                                                            </a>
-                                                        @endif
                                                     </div>
+
+                                                    {{-- Daftar dokumen (multi) untuk tahap ini --}}
+                                                    @if (!empty($event['meta']['documents']) && count($event['meta']['documents']) > 0)
+                                                        <div class="mt-2 flex flex-wrap gap-1.5">
+                                                            @foreach ($event['meta']['documents'] as $doc)
+                                                                <a href="{{ $doc['preview_url'] }}" target="_blank" rel="noopener"
+                                                                    class="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-blue-600 hover:underline dark:border-slate-700 dark:bg-slate-900/50 dark:text-blue-400"
+                                                                    title="{{ $doc['name'] ?? __('Dokumen') }}">
+                                                                    <svg class="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                                                                    <span class="max-w-[12rem] truncate">{{ $doc['name'] ?? __('Dokumen') }}</span>
+                                                                    @if (!empty($doc['ext']))
+                                                                        <span class="ml-1 text-[10px] uppercase text-gray-400 dark:text-slate-500">{{ $doc['ext'] }}</span>
+                                                                    @endif
+                                                                    @if (!empty($doc['size_mb']))
+                                                                        <span class="ml-1 text-[10px] text-gray-400 dark:text-slate-500">{{ $doc['size_mb'] }} MB</span>
+                                                                    @endif
+                                                                </a>
+                                                            @endforeach
+                                                        </div>
+                                                    @endif
                                                 @elseif ($event['type'] === 'upgrade')
                                                     <dl class="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                                                         <div>

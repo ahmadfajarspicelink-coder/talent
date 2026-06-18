@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\DowntimeLog;
+use App\Models\Order;
+use App\Models\OrderStatusHistory;
 use App\Services\OrderStatusService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\View\View;
@@ -36,7 +38,9 @@ class TrackingClientController extends Controller
      */
     public function show(Client $client): View
     {
-        // Eager load semua relasi yang ditampilkan di timeline.
+        // Eager load semua relasi yang ditampilkan di timeline, termasuk
+        // dokumen per status history (OrderStatusHistory.documents) agar
+        // view bisa menampilkan multi-dokumen per tahap tanpa N+1.
         $client->load([
             'orders' => fn ($q) => $q
                 ->orderBy('created_at')
@@ -45,6 +49,7 @@ class TrackingClientController extends Controller
                     'vendor',
                     'package',
                     'statusHistories' => fn ($q2) => $q2->orderBy('changed_at'),
+                    'statusHistories.documents',
                 ]),
             'orders.upgrades',
         ]);
@@ -105,6 +110,8 @@ class TrackingClientController extends Controller
 
             // Event per perubahan status (OrderStatusHistory).
             foreach ($order->statusHistories as $history) {
+                $documents = $this->documentsMeta($order, $history);
+
                 $events[] = $this->event(
                     type: 'order',
                     subtype: 'status_change',
@@ -116,9 +123,8 @@ class TrackingClientController extends Controller
                         'order_id' => $order->id,
                         'order_number' => $order->display_number,
                         'status' => $history->status,
-                        'has_document' => $history->hasDocument(),
-                        'document_url' => $history->document_url,
-                        'document_name' => $history->document_name,
+                        'has_document' => $documents !== [],
+                        'documents' => $documents,
                         'note' => $history->note,
                     ],
                     icon: $this->statusIcon($history->status),
@@ -197,6 +203,32 @@ class TrackingClientController extends Controller
         });
 
         return $events;
+    }
+
+    /**
+     * Siapkan daftar metadata dokumen untuk satu OrderStatusHistory agar
+     * view Tracking dapat merender multi-dokumen (maks 5 × 5 MB per tahap).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function documentsMeta(Order $order, OrderStatusHistory $history): array
+    {
+        $items = [];
+        foreach ($history->documents as $doc) {
+            $items[] = [
+                'id' => $doc->id,
+                'name' => $doc->document_name,
+                'ext' => $doc->documentExtension(),
+                'size_mb' => $doc->size_mb,
+                'preview_url' => route('orders.documents.preview', [$order, $doc]),
+                'download_url' => route('orders.documents.raw', [$order, $doc, 'dl' => 1]),
+                'raw_url' => route('orders.documents.raw', [$order, $doc]),
+                'is_pdf' => $doc->isPdf(),
+                'is_image' => $doc->isImage(),
+            ];
+        }
+
+        return $items;
     }
 
     /**
