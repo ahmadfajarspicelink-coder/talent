@@ -268,6 +268,7 @@ class OrderController extends Controller
             'vendor_otc.required' => 'OTC vendor wajib diisi.',
             'vendor_mrc.required' => 'MRC vendor wajib diisi.',
             'bandwidth.required' => 'Bandwidth wajib diisi.',
+            'vendor_bandwidth.required' => 'Bandwidth vendor wajib diisi.',
             'baa_number.required' => 'Nomor BAA wajib diisi.',
             'bast_number.required' => 'Nomor BAST wajib diisi.',
             'contract_months.required' => 'Durasi kontrak wajib diisi.',
@@ -285,6 +286,7 @@ class OrderController extends Controller
             'vendor_otc',
             'vendor_mrc',
             'bandwidth',
+            'vendor_bandwidth',
             'baa_number',
             'bast_number',
             'contract_months',
@@ -349,6 +351,7 @@ class OrderController extends Controller
                 'po_vendor_number' => ['required', 'string', 'max:255'],
                 'vendor_otc' => ['required', 'integer', 'min:0'],
                 'vendor_mrc' => ['required', 'integer', 'min:0'],
+                'vendor_bandwidth' => ['required', 'integer', 'min:0'],
             ],
             'BAA_BAST' => [
                 'baa_number' => ['required', 'string', 'max:255'],

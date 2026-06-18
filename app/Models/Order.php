@@ -31,6 +31,7 @@ class Order extends Model
         'package_id',
         'package_name',
         'bandwidth',
+        'vendor_bandwidth',
         'note',
         'status',
         'provider_otc',
@@ -210,6 +211,42 @@ class Order extends Model
         }
 
         return is_numeric($value) ? $value.' Mbps' : $value;
+    }
+
+    /**
+     * Label bandwidth Vendor dengan satuan Mbps. Null bila belum diisi pada
+     * tahap PO_Vendor. Bandingkan dengan bandwidth_label untuk alert mismatch.
+     */
+    public function getVendorBandwidthLabelAttribute(): ?string
+    {
+        $value = trim((string) $this->vendor_bandwidth);
+
+        if ($value === '') {
+            return null;
+        }
+
+        return is_numeric($value) ? $value.' Mbps' : $value;
+    }
+
+    /**
+     * True bila nilai bandwidth PO_Provider berbeda dari PO_Vendor.
+     * Dipakai untuk menampilkan ikon Alert pada daftar order dan ringkasan
+     * tahap. Hanya relevan bila kedua nilai sudah terisi.
+     */
+    public function getHasBandwidthMismatchAttribute(): bool
+    {
+        $provider = trim((string) $this->bandwidth);
+        $vendor = trim((string) $this->vendor_bandwidth);
+
+        if ($provider === '' || $vendor === '') {
+            return false;
+        }
+
+        if (! is_numeric($provider) || ! is_numeric($vendor)) {
+            return false;
+        }
+
+        return (int) $provider !== (int) $vendor;
     }
 
     /**

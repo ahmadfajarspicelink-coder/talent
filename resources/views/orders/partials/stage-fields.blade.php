@@ -75,6 +75,15 @@
                     value="{{ old('vendor_mrc') }}" class="{{ $inputClass }}" />
                 <x-input-error :messages="$errors->get('vendor_mrc')" class="mt-1" />
             </div>
+            <div>
+                {{-- `vendor_bandwidth` disimpan terpisah dari `bandwidth` (PO_Provider)
+                    agar nilai bandwidth PO_Provider tidak tertimpa. Lihat migrasi
+                    2026_06_18_100000_add_vendor_bandwidth_to_orders_table. --}}
+                <label for="vendor_bandwidth" class="{{ $labelClass }}">{{ __('Bandwidth (Mbps)') }}</label>
+                <input type="number" min="0" step="1" id="vendor_bandwidth" name="vendor_bandwidth" data-req
+                    value="{{ old('vendor_bandwidth', $order->vendor_bandwidth ?? $order->bandwidth) }}" class="{{ $inputClass }}" />
+                <x-input-error :messages="$errors->get('vendor_bandwidth')" class="mt-1" />
+            </div>
         </div>
         @break
 

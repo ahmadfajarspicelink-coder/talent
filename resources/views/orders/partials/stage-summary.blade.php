@@ -32,12 +32,28 @@
         @break
 
     @case('PO_Vendor')
-        @if ($order->po_vendor_number || $order->vendor_otc !== null)
+        @if ($order->po_vendor_number || $order->vendor_otc !== null || $order->vendor_bandwidth !== null)
             <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-700 dark:text-slate-200">
                 <span><span class="font-medium text-gray-500 dark:text-slate-400">{{ __('Nomor PO') }}:</span> {{ $order->po_vendor_number ?: '—' }}</span>
                 <span><span class="font-medium text-gray-500 dark:text-slate-400">{{ __('OTC Vendor') }}:</span> {{ $money($order->vendor_otc) }}</span>
                 <span><span class="font-medium text-gray-500 dark:text-slate-400">{{ __('MRC Vendor') }}:</span> {{ $money($order->vendor_mrc) }}</span>
+                <span><span class="font-medium text-gray-500 dark:text-slate-400">{{ __('Bandwidth (Mbps)') }}:</span> {{ $order->vendor_bandwidth !== null ? $order->vendor_bandwidth . ' Mbps' : '—' }}</span>
             </div>
+
+            {{-- Alert mismatch bandwidth: PO_Provider vs PO_Vendor (QW #6 / H-05).
+                 Ditampilkan bila nilai vendor_bandwidth sudah terisi dan berbeda
+                 dari nilai bandwidth provider. --}}
+            @if ($order->vendor_bandwidth !== null && $order->vendor_bandwidth !== '' && $order->bandwidth !== null && $order->bandwidth !== '' && (int) $order->vendor_bandwidth !== (int) $order->bandwidth)
+                <div class="mt-2 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300">
+                    <p class="font-semibold">{{ __('Peringatan: Bandwidth tidak sama dengan PO Provider') }}</p>
+                    <p class="mt-0.5">
+                        {{ __('PO Provider') }}: <span class="font-semibold">{{ $order->bandwidth_label }}</span>
+                        &rarr;
+                        {{ __('PO Vendor') }}: <span class="font-semibold">{{ $order->vendor_bandwidth_label }}</span>.
+                    </p>
+                    <p class="mt-1">{{ __('Nilai berbeda, namun order tetap dapat dilanjutkan.') }}</p>
+                </div>
+            @endif
         @endif
         @break
 

@@ -148,9 +148,14 @@
 
                                             {{-- Form penyelesaian tahap berikutnya --}}
                                             @if ($isNext)
+                                                @php(
+                                                    $providerBandwidth = $stage === 'PO_Vendor' && $order->bandwidth !== null && $order->bandwidth !== ''
+                                                        ? (int) $order->bandwidth
+                                                        : null
+                                                )
                                                 <form method="POST" action="{{ route('orders.advanceStatus', $order) }}"
                                                     enctype="multipart/form-data" class="mt-3 rounded-md border border-gray-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/50"
-                                                    x-data="{ ok: false, check() { this.ok = [...$root.querySelectorAll('[data-req]')].every(el => String(el.value).trim() !== ''); } }"
+                                                    x-data='{ ok: false, providerBw: {{ $providerBandwidth === null ? 'null' : (int) $providerBandwidth }}, bwMismatch() { if (this.providerBw === null) return false; const el = this.$root.querySelector("input[name=vendor_bandwidth]"); if (!el) return false; const v = String(el.value).trim(); if (v === "") return false; return parseInt(v, 10) !== this.providerBw; }, vendorBw() { const el = this.$root.querySelector("input[name=vendor_bandwidth]"); return el ? String(el.value).trim() : ""; }, check() { this.ok = [...this.$root.querySelectorAll("[data-req]")].every(el => String(el.value).trim() !== ""); } }'
                                                     x-init="check()" @input="check()">
                                                     @csrf
                                                     <input type="hidden" name="status" value="{{ $stage }}" />
@@ -160,13 +165,25 @@
                                                     <div class="mt-3">
                                                         <button type="submit" :disabled="!ok"
                                                             class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-white transition"
-                                                            :class="ok ? 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer dark:bg-indigo-500 dark:hover:bg-indigo-400' : 'bg-indigo-300 cursor-not-allowed dark:bg-indigo-800'">
+                                                            :class="!ok ? 'bg-indigo-300 cursor-not-allowed dark:bg-indigo-800' : (bwMismatch ? 'bg-yellow-500 hover:bg-yellow-600 cursor-pointer dark:bg-yellow-500 dark:hover:bg-yellow-400' : 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer dark:bg-indigo-500 dark:hover:bg-indigo-400')">
                                                             <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                                                             </svg>
                                                             {{ __('Tandai Selesai') }}
                                                         </button>
                                                         <p class="mt-1 text-xs text-gray-400 dark:text-slate-500">{{ __('Isi semua field untuk dapat menandai selesai.') }}</p>
+
+                                                        {{-- Peringatan mismatch bandwidth (PO_Provider vs PO_Vendor) --}}
+                                                        <div x-show="bwMismatch" x-cloak
+                                                            class="mt-2 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300">
+                                                            <p class="font-semibold">{{ __('Peringatan: Bandwidth tidak sama') }}</p>
+                                                            <p class="mt-0.5">
+                                                                {{ __('PO Provider') }}: <span class="font-semibold" x-text="providerBw + ' Mbps'"></span>
+                                                                &rarr;
+                                                                {{ __('PO Vendor') }}: <span class="font-semibold" x-text="vendorBw() + ' Mbps'"></span>.
+                                                            </p>
+                                                            <p class="mt-1">{{ __('Nilai berbeda, namun Anda tetap dapat melanjutkan.') }}</p>
+                                                        </div>
                                                     </div>
                                                 </form>
                                             @endif

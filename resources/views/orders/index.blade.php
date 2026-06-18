@@ -41,6 +41,7 @@
                             <th class="px-3 py-2 font-medium">{{ __('Client') }}</th>
                             <th class="px-3 py-2 font-medium">{{ __('Provider/Vendor') }}</th>
                             <!-- <th class="px-3 py-2 font-medium">{{ __('Vendor') }}</th> -->
+                            <th class="px-3 py-2 font-medium text-center" title="{{ __('Alert: bandwidth PO Provider \u2260 PO Vendor') }}">{{ __('Alert') }}</th>
                             <th class="px-3 py-2 font-medium text-right">{{ __('Margin OTC') }}</th>
                             <th class="px-3 py-2 font-medium text-right">{{ __('Margin MRC') }}</th>
                             <th class="px-3 py-2 font-medium">{{ __('Status') }}</th>
@@ -65,6 +66,19 @@
                                 </td>
                                 <!-- <td class="px-3 py-3 align-middle text-gray-700 dark:text-slate-300">{{ $order->provider?->name ?? '—' }}</td> -->
                                 <!-- <td class="px-3 py-3 align-middle text-gray-700 dark:text-slate-300">{{ $order->vendor?->name ?? '—' }}</td> -->
+                                {{-- Alert: bandwidth PO_Provider \u2260 PO_Vendor --}}
+                                <td class="px-3 py-3 align-middle text-center">
+                                    @if ($order->has_bandwidth_mismatch)
+                                        <span title="{{ __('Bandwidth tidak sama: PO Provider') }} {{ $order->bandwidth_label }} \u2014 {{ __('PO Vendor') }} {{ $order->vendor_bandwidth_label }}"
+                                            class="inline-flex items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-950/60 p-1 text-yellow-700 dark:text-yellow-300">
+                                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                                            </svg>
+                                        </span>
+                                    @else
+                                        <span class="text-gray-300 dark:text-slate-600">&mdash;</span>
+                                    @endif
+                                </td>
                                 <td class="px-3 py-3 align-middle text-right tabular-nums whitespace-nowrap">
                                     <x-rupiah :value="$order->margin_otc" />
                                 </td>

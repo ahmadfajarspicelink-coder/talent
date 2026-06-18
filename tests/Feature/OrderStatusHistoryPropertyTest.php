@@ -175,6 +175,7 @@ class OrderStatusHistoryPropertyTest extends TestCase
                 'po_vendor_number' => 'PO-V-001',
                 'vendor_otc' => 500_000,
                 'vendor_mrc' => 250_000,
+                'vendor_bandwidth' => 50,
             ],
             'BAA_BAST' => [
                 'baa_number' => 'BAA-001',
