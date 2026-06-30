@@ -4,65 +4,52 @@ namespace App\Services;
 
 use App\Models\Device;
 use App\Models\DeviceStat;
-use App\Models\NetworkInterface;
 use App\Models\InterfaceStat;
+use App\Models\NetworkInterface;
 use Illuminate\Support\Facades\Log;
 
 class SnmpService
 {
     // ── IF-MIB ──
-    const OID_IF_INDEX        = '1.3.6.1.2.1.2.2.1.1';
-    const OID_IF_DESCR        = '1.3.6.1.2.1.2.2.1.2';
-    const OID_IF_TYPE         = '1.3.6.1.2.1.2.2.1.3';
-    const OID_IF_SPEED        = '1.3.6.1.2.1.2.2.1.5';
-    const OID_IF_HIGH_SPEED   = '1.3.6.1.2.1.31.1.1.1.15';  // ifHighSpeed (Mbps)
-    const OID_IF_ADMIN_STATUS = '1.3.6.1.2.1.2.2.1.7';
-    const OID_IF_OPER_STATUS  = '1.3.6.1.2.1.2.2.1.8';
-    const OID_IF_IN_OCTETS    = '1.3.6.1.2.1.2.2.1.10';
-    const OID_IF_IN_ERRORS    = '1.3.6.1.2.1.2.2.1.14';
-    const OID_IF_OUT_OCTETS   = '1.3.6.1.2.1.2.2.1.16';
-    const OID_IF_OUT_ERRORS   = '1.3.6.1.2.1.2.2.1.20';
-    const OID_IF_ALIAS        = '1.3.6.1.2.1.31.1.1.1.18';
+    private const OID_IF_INDEX        = '1.3.6.1.2.1.2.2.1.1';
+    private const OID_IF_DESCR        = '1.3.6.1.2.1.2.2.1.2';
+    private const OID_IF_TYPE         = '1.3.6.1.2.1.2.2.1.3';
+    private const OID_IF_SPEED        = '1.3.6.1.2.1.2.2.1.5';
+    private const OID_IF_HIGH_SPEED   = '1.3.6.1.2.1.31.1.1.1.15';  // ifHighSpeed (Mbps)
+    private const OID_IF_ADMIN_STATUS = '1.3.6.1.2.1.2.2.1.7';
+    private const OID_IF_OPER_STATUS  = '1.3.6.1.2.1.2.2.1.8';
+    private const OID_IF_IN_OCTETS    = '1.3.6.1.2.1.2.2.1.10';
+    private const OID_IF_IN_ERRORS    = '1.3.6.1.2.1.2.2.1.14';
+    private const OID_IF_OUT_OCTETS   = '1.3.6.1.2.1.2.2.1.16';
+    private const OID_IF_OUT_ERRORS   = '1.3.6.1.2.1.2.2.1.20';
+    private const OID_IF_ALIAS        = '1.3.6.1.2.1.31.1.1.1.18';
 
     // ── System ──
-    const OID_SYS_DESCR  = '1.3.6.1.2.1.1.1.0';
-    const OID_SYS_UPTIME = '1.3.6.1.2.1.1.3.0';
-    const OID_SYS_NAME   = '1.3.6.1.2.1.1.5.0';
+    private const OID_SYS_DESCR  = '1.3.6.1.2.1.1.1.0';
+    private const OID_SYS_UPTIME = '1.3.6.1.2.1.1.3.0';
+    private const OID_SYS_NAME   = '1.3.6.1.2.1.1.5.0';
 
     // ── HOST-RESOURCES-MIB (CPU) ──
-    // hrProcessorLoad: average CPU load per processor (0-100)
-    const OID_HR_PROCESSOR_LOAD = '1.3.6.1.2.1.25.3.3.1.2';
+    private const OID_HR_PROCESSOR_LOAD = '1.3.6.1.2.1.25.3.3.1.2';
 
     // ── HOST-RESOURCES-MIB (Memory/Storage) ──
-    // hrStorageType, hrStorageDescr, hrStorageSize, hrStorageUsed
-    const OID_HR_STORAGE_TYPE  = '1.3.6.1.2.1.25.2.3.1.2';
-    const OID_HR_STORAGE_DESCR = '1.3.6.1.2.1.25.2.3.1.3';
-    const OID_HR_STORAGE_SIZE  = '1.3.6.1.2.1.25.2.3.1.5';
-    const OID_HR_STORAGE_USED  = '1.3.6.1.2.1.25.2.3.1.6';
-    const OID_HR_STORAGE_ALLOC = '1.3.6.1.2.1.25.2.3.1.4';  // allocation units
+    private const OID_HR_STORAGE_TYPE  = '1.3.6.1.2.1.25.2.3.1.2';
+    private const OID_HR_STORAGE_DESCR = '1.3.6.1.2.1.25.2.3.1.3';
+    private const OID_HR_STORAGE_SIZE  = '1.3.6.1.2.1.25.2.3.1.5';
+    private const OID_HR_STORAGE_USED  = '1.3.6.1.2.1.25.2.3.1.6';
+    private const OID_HR_STORAGE_ALLOC = '1.3.6.1.2.1.25.2.3.1.4';
 
-    // ── Vendor-specific CPU ──
-    // Mikrotik: systemHealth (1.3.6.1.4.1.14988.1.1.3)
-    const OID_MK_CPU_LOAD     = '1.3.6.1.4.1.14988.1.1.3.11.0';
-    const OID_MK_MEM_USED     = '1.3.6.1.4.1.14988.1.1.7.8.0';
-    const OID_MK_MEM_TOTAL    = '1.3.6.1.4.1.14988.1.1.7.7.0';
+    // ── Vendor-specific ──
+    private const OID_MK_CPU_LOAD    = '1.3.6.1.4.1.14988.1.1.3.11.0';
+    private const OID_MK_MEM_USED    = '1.3.6.1.4.1.14988.1.1.7.8.0';
+    private const OID_MK_MEM_TOTAL   = '1.3.6.1.4.1.14988.1.1.7.7.0';
+    private const OID_CISCO_CPU_5MIN = '1.3.6.1.4.1.9.9.109.1.1.1.1.8';
+    private const OID_HW_MEM_USED    = '1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7';
+    private const OID_HW_MEM_TOTAL   = '1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5';
 
-    // Cisco: cpmCPUTotalEntry
-    const OID_CISCO_CPU_5MIN  = '1.3.6.1.4.1.9.9.109.1.1.1.1.8';
-
-    // Huawei: hwMem
-    const OID_HW_MEM_USED     = '1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7';
-    const OID_HW_MEM_TOTAL    = '1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5';
-
-    private ?TelegramService $telegram = null;
-
-    private function getTelegram(): TelegramService
-    {
-        if ($this->telegram === null) {
-            $this->telegram = new TelegramService();
-        }
-        return $this->telegram;
-    }
+    public function __construct(
+        private readonly TelegramService $telegram = new TelegramService(),
+    ) {}
 
     // ──────────────────────────────────────
     //  Core SNMP helpers
@@ -330,7 +317,7 @@ class SnmpService
             $device->update(['status' => 'offline', 'last_polled_at' => now()]);
 
             if ($wasOnline) {
-                $this->getTelegram()->alertDeviceOffline($device->name, $ip);
+                $this->telegram->alertDeviceOffline($device->name, $ip);
                 $alerts[] = "Device {$device->name} went OFFLINE";
             }
 
@@ -366,7 +353,7 @@ class SnmpService
         ]);
 
         if ($wasOffline) {
-            $this->getTelegram()->alertDeviceOnline($device->name, $ip);
+            $this->telegram->alertDeviceOnline($device->name, $ip);
             $alerts[] = "Device {$device->name} is back ONLINE";
         }
 
@@ -375,14 +362,14 @@ class SnmpService
         $memThreshold = (int) config('monitoring.alert_memory', 80);
 
         if ($cpu !== null && $cpu >= $cpuThreshold) {
-            $this->getTelegram()->alertHighCpu($device->name, $ip, $cpu);
+            $this->telegram->alertHighCpu($device->name, $ip, $cpu);
             $alerts[] = "HIGH CPU: {$device->name} → {$cpu}%";
         }
 
         if ($mem && isset($mem['total']) && $mem['total'] > 0) {
             $memPct = round(($mem['used'] / $mem['total']) * 100, 1);
             if ($memPct >= $memThreshold) {
-                $this->getTelegram()->alertHighMemory($device->name, $ip, $memPct);
+                $this->telegram->alertHighMemory($device->name, $ip, $memPct);
                 $alerts[] = "HIGH MEMORY: {$device->name} → {$memPct}%";
             }
         }
@@ -402,10 +389,10 @@ class SnmpService
                 $ifAlias = $data['if_alias'] ?? $existing->if_alias;
 
                 if ($newStatus === 'down') {
-                    $this->getTelegram()->alertPortDown($device->name, $ip, $data['if_name'], $ifAlias);
+                    $this->telegram->alertPortDown($device->name, $ip, $data['if_name'], $ifAlias);
                     $alerts[] = "Port DOWN: {$device->name} → {$data['if_name']}";
                 } elseif ($newStatus === 'up' && $existing->if_oper_status === 'down') {
-                    $this->getTelegram()->alertPortUp($device->name, $ip, $data['if_name'], $ifAlias);
+                    $this->telegram->alertPortUp($device->name, $ip, $data['if_name'], $ifAlias);
                     $alerts[] = "Port UP: {$device->name} → {$data['if_name']}";
                 }
             }

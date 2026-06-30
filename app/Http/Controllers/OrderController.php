@@ -38,6 +38,10 @@ use Illuminate\View\View;
  */
 class OrderController extends Controller
 {
+    public function __construct(
+        private readonly OrderStatusService $statusService,
+    ) {}
+
     // ===================================================================
     // BEGIN order creation methods (task 11.2) — R5.1, R5.3, R5.4
     // ===================================================================
@@ -77,40 +81,27 @@ class OrderController extends Controller
 
         $data = $request->validated();
         $clientName = trim($data['client_name']);
-        $clientAddress = isset($data['client_address']) ? trim((string) $data['client_address']) : null;
-        $note = isset($data['note']) ? trim((string) $data['note']) : null;
+        $clientAddress = filled($data['client_address'] ?? null) ? trim($data['client_address']) : null;
+        $note = filled($data['note'] ?? null) ? trim($data['note']) : null;
 
         $order = DB::transaction(function () use ($data, $clientName, $clientAddress, $note, $initialStatus) {
-            // Cari Client berdasarkan nama, atau buat baru (inactive) — relasi
-            // dari Order, bukan input manual di Modul_Client.
-            $client = Client::firstOrCreate(
-                ['name' => $clientName],
-                ['status' => 'inactive'],
-            );
+            $client = Client::firstOrCreate(['name' => $clientName], ['status' => 'inactive']);
 
-            // Simpan/perbarui alamat client dari input order.
             if ($clientAddress !== null && $clientAddress !== '') {
                 $client->update(['address' => $clientAddress]);
             }
 
             $order = Order::create([
-                'client_id' => $client->id,
-                'provider_id' => $data['provider_id'],
-                'vendor_id' => $data['vendor_id'] ?? null,
-                'created_by' => Auth::id(),  // H-04 (audit): ownership tracking
-                'note' => ($note === '') ? null : $note,
-                'status' => $initialStatus,
+                'client_id'    => $client->id,
+                'provider_id'  => $data['provider_id'],
+                'vendor_id'    => $data['vendor_id'] ?? null,
+                'created_by'   => Auth::id(),
+                'note'         => $note ?: null,
+                'status'       => $initialStatus,
+                'order_number' => 'ORD-' . now()->format('Ymd') . '-' . bin2hex(random_bytes(3)),
             ]);
 
-            // Nomor order otomatis: ORD-{YYYYMMDD}-{6 hex} (mis. ORD-20260609-4b41e7).
-            $order->update([
-                'order_number' => 'ORD-'.now()->format('Ymd').'-'.bin2hex(random_bytes(3)),
-            ]);
-
-            $order->statusHistories()->create([
-                'status' => $initialStatus,
-                'changed_at' => now(),
-            ]);
+            $order->statusHistories()->create(['status' => $initialStatus, 'changed_at' => now()]);
 
             return $order;
         });
@@ -150,7 +141,7 @@ class OrderController extends Controller
 
         return view('orders.index', [
             'orders' => $orders,
-            'statusService' => app(OrderStatusService::class),
+            'statusService' => $this->statusService,
         ]);
     }
 
@@ -188,7 +179,7 @@ class OrderController extends Controller
                 ->keyBy('status'),
             'maxUploadMb' => 5,
             'maxDocuments' => 5,
-            'statusService' => app(OrderStatusService::class),
+            'statusService' => $this->statusService,
             'packages' => \App\Models\Package::orderBy('name')->get(),
         ]);
     }
@@ -215,12 +206,9 @@ class OrderController extends Controller
     {
         $this->authorize('update', $order);
 
-        $statusService = app(OrderStatusService::class);
-
         $current = $order->status;
 
-        // Order yang sudah selesai (Client_Aktif) tidak boleh diubah lagi.
-        if ($statusService->isComplete($current)) {
+        if ($this->statusService->isComplete($current)) {
             return redirect()
                 ->back()
                 ->with('error', 'Order sudah selesai');
@@ -237,13 +225,11 @@ class OrderController extends Controller
             'target.in' => 'target tidak valid',
         ]);
 
-        // Target dari input ('status'/'target') atau hitung penerus langsung.
         $target = $validatedTarget['status']
             ?? $validatedTarget['target']
-            ?? $statusService->nextStatus($current);
+            ?? $this->statusService->nextStatus($current);
 
-        // Transisi harus mengikuti urutan: hanya penerus langsung yang sah.
-        if ($target === null || ! $statusService->canTransition($current, $target)) {
+        if ($target === null || ! $this->statusService->canTransition($current, $target)) {
             return redirect()
                 ->back()
                 ->with('error', 'status harus mengikuti urutan');
@@ -305,7 +291,7 @@ class OrderController extends Controller
 
         $files = $request->file('documents', []);
 
-        DB::transaction(function () use ($order, $target, $orderUpdates, $files, $statusService) {
+        DB::transaction(function () use ($order, $target, $orderUpdates, $files) {
             $order->fill($orderUpdates);
 
             // Saat mencapai tahap akhir: tetapkan masa kontrak client.
@@ -344,7 +330,7 @@ class OrderController extends Controller
 
         return redirect()
             ->back()
-            ->with('status', "Status Order berhasil dimajukan ke {$statusService->title($target)}.");
+            ->with('status', "Status Order berhasil dimajukan ke {$this->statusService->title($target)}.");
     }
 
     /**
@@ -398,24 +384,15 @@ class OrderController extends Controller
         $this->authorize('delete', $order);
 
         DB::transaction(function () use ($order) {
-            // Kumpulkan semua path berkas dari seluruh dokumen terlampir
-            // sebelum menghapus histori (yang akan men-cascade order_documents).
-            $paths = [];
-            foreach ($order->statusHistories as $history) {
-                foreach ($history->documents as $document) {
-                    if ($document->document_path) {
-                        $paths[] = $document->document_path;
-                    }
-                }
-            }
+            $paths = $order->statusHistories
+                ->flatMap(fn ($h) => $h->documents->pluck('document_path'))
+                ->filter()
+                ->values();
 
-            $order->statusHistories()->delete(); // cascades ke order_documents
+            $order->statusHistories()->delete();
             $order->delete();
 
-            // Hapus fisik berkas setelah DB commit aman.
-            foreach ($paths as $path) {
-                Storage::disk('public')->delete($path);
-            }
+            Storage::disk('public')->delete($paths->all());
         });
 
         return redirect()

@@ -7,6 +7,7 @@ use App\Models\DowntimeLog;
 use App\Models\Partner;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
@@ -52,33 +53,13 @@ class LogdownController extends Controller
     {
         $data = $this->validateLog($request);
 
-        $downAt = \Carbon\Carbon::parse($data['down_at']);
-        $upAt = isset($data['up_at']) && $data['up_at'] !== '' ? \Carbon\Carbon::parse($data['up_at']) : null;
-
-        // Guard: up_at tidak boleh sebelum down_at.
-        if ($upAt !== null && $upAt->lt($downAt)) {
-            return back()
-                ->withInput()
-                ->with('error', 'Waktu pulih tidak boleh lebih awal dari waktu mulai down.');
+        if (($error = $this->guardUpBeforeDown($data)) !== null) {
+            return $error;
         }
 
-        // Durasi via Unix timestamp (selalu integer, tidak terpengaruh
-        // konvensi signed/unsigned Carbon::diffInSeconds antar versi).
-        $durationSeconds = $upAt !== null ? (int) abs($upAt->getTimestamp() - $downAt->getTimestamp()) : null;
-        $status = $upAt !== null ? 'up' : 'down';
+        $payload = $this->buildPayload($data);
 
-        DowntimeLog::create([
-            'vendor_id' => $data['vendor_id'] ?? null,
-            'client_id' => $data['client_id'] ?? null,
-            'client_name' => $this->resolveClientName($data),
-            'down_at' => $downAt,
-            'up_at' => $upAt,
-            'duration_seconds' => $durationSeconds,
-            'status' => $status,
-            'reason' => $data['reason'],
-            'action' => $data['action'] ?? null,
-            'created_by' => Auth::id(),
-        ]);
+        DowntimeLog::create([...$payload, 'created_by' => Auth::id()]);
 
         return redirect()
             ->route('logdown.index')
@@ -92,29 +73,11 @@ class LogdownController extends Controller
     {
         $data = $this->validateLog($request, $logdown);
 
-        $downAt = \Carbon\Carbon::parse($data['down_at']);
-        $upAt = isset($data['up_at']) && $data['up_at'] !== '' ? \Carbon\Carbon::parse($data['up_at']) : null;
-
-        if ($upAt !== null && $upAt->lt($downAt)) {
-            return back()
-                ->withInput()
-                ->with('error', 'Waktu pulih tidak boleh lebih awal dari waktu mulai down.');
+        if (($error = $this->guardUpBeforeDown($data)) !== null) {
+            return $error;
         }
 
-        $durationSeconds = $upAt !== null ? (int) abs($upAt->getTimestamp() - $downAt->getTimestamp()) : null;
-        $status = $upAt !== null ? 'up' : 'down';
-
-        $logdown->fill([
-            'vendor_id' => $data['vendor_id'] ?? null,
-            'client_id' => $data['client_id'] ?? null,
-            'client_name' => $this->resolveClientName($data),
-            'down_at' => $downAt,
-            'up_at' => $upAt,
-            'duration_seconds' => $durationSeconds,
-            'status' => $status,
-            'reason' => $data['reason'],
-            'action' => $data['action'] ?? null,
-        ])->save();
+        $logdown->fill($this->buildPayload($data))->save();
 
         return redirect()
             ->route('logdown.index')
@@ -131,21 +94,14 @@ class LogdownController extends Controller
         }
 
         $upAt = now();
-        $downAt = $logdown->down_at;
 
-        if ($upAt->lt($downAt)) {
-            return back()->with('error', 'Waktu pulih tidak valid.');
-        }
+        $logdown->update([
+            'up_at' => $upAt,
+            'duration_seconds' => (int) abs($upAt->getTimestamp() - $logdown->down_at->getTimestamp()),
+            'status' => 'up',
+        ]);
 
-        DB::transaction(function () use ($logdown, $upAt) {
-            $logdown->update([
-                'up_at' => $upAt,
-                'duration_seconds' => (int) abs($upAt->getTimestamp() - $logdown->down_at->getTimestamp()),
-                'status' => 'up',
-            ]);
-        });
-
-        return back()->with('status', 'Insiden ditandai pulih. Durasi: '.$logdown->fresh()->duration_human.'.');
+        return back()->with('status', 'Insiden ditandai pulih. Durasi: ' . $logdown->fresh()->duration_human . '.');
     }
 
     /**
@@ -186,18 +142,56 @@ class LogdownController extends Controller
     }
 
     /**
-     * Tentukan client_name yang disimpan: pakai nama dari relasi bila
-     * client_id terisi, fallback ke input manual client_name.
+     * Parse down_at/up_at, hitung durasi & status → payload siap create/update.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildPayload(array $data): array
+    {
+        $downAt = Carbon::parse($data['down_at']);
+        $upAt = filled($data['up_at'] ?? null) ? Carbon::parse($data['up_at']) : null;
+
+        return [
+            'vendor_id'        => $data['vendor_id'] ?? null,
+            'client_id'        => $data['client_id'] ?? null,
+            'client_name'      => $this->resolveClientName($data),
+            'down_at'          => $downAt,
+            'up_at'            => $upAt,
+            'duration_seconds' => $upAt !== null ? (int) abs($upAt->getTimestamp() - $downAt->getTimestamp()) : null,
+            'status'           => $upAt !== null ? 'up' : 'down',
+            'reason'           => $data['reason'],
+            'action'           => $data['action'] ?? null,
+        ];
+    }
+
+    /**
+     * Guard: up_at tidak boleh sebelum down_at. Returns redirect error or null.
+     */
+    private function guardUpBeforeDown(array $data): ?RedirectResponse
+    {
+        if (blank($data['up_at'] ?? null)) {
+            return null;
+        }
+
+        $downAt = Carbon::parse($data['down_at']);
+        $upAt = Carbon::parse($data['up_at']);
+
+        return $upAt->lt($downAt)
+            ? back()->withInput()->with('error', 'Waktu pulih tidak boleh lebih awal dari waktu mulai down.')
+            : null;
+    }
+
+    /**
+     * Tentukan client_name: pakai nama dari relasi bila client_id terisi,
+     * fallback ke input manual client_name.
      */
     private function resolveClientName(array $data): ?string
     {
         if (! empty($data['client_id'])) {
             return Client::whereKey($data['client_id'])->value('name')
-                ?: ($data['client_name'] ?? null);
+                ?? ($data['client_name'] ?? null);
         }
 
-        $name = $data['client_name'] ?? null;
-
-        return ($name === null || trim((string) $name) === '') ? null : trim((string) $name);
+        return filled($data['client_name'] ?? null) ? trim($data['client_name']) : null;
     }
 }

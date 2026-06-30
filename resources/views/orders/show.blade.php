@@ -12,6 +12,11 @@
     Dokumen: setiap OrderStatusHistory dapat memiliki banyak OrderDocument
     (maks 5 × 5 MB). Daftar dokumen ditampilkan per tahap dengan tombol
     pratinjau & hapus individu; form upload menerima multi-file.
+
+    Generate BAA/BAST: tombol khusus di tahap BAA_BAST (submit dengan
+    formaction) yang mengirim form ke orders.bast.generate tanpa advance
+    tahap. Link download BAA/BAST muncul di stage-summary setelah tahap
+    BAA_BAST direach (user harus klik "Tandai Selesai" dulu).
 --}}
 <x-app-layout>
     <x-slot name="header">
@@ -29,9 +34,14 @@
         </div>
     </x-slot>
 
-    @php($currentIndex = $statusService->indexOf($order->status))
-    @php($maxUploadMb = 5)
-    @php($maxDocuments = 5)
+    @php
+        $currentIndex = $statusService->indexOf($order->status);
+        $maxUploadMb = 5;
+        $maxDocuments = 5;
+        // Pre-compute: map status → history (sekali, bukan di loop)
+        $historyByStatus = $statusHistories->groupBy('status')
+            ->map(fn ($group) => $group->sortByDesc('id')->first());
+    @endphp
 
     <div class="py-8">
         <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
@@ -64,6 +74,18 @@
                 </div>
             @endif
 
+            {{-- Flash status / error --}}
+            @if (session('status'))
+                <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950/40 dark:text-green-300">
+                    {{ session('status') }}
+                </div>
+            @endif
+            @if (session('error'))
+                <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+                    {{ session('error') }}
+                </div>
+            @endif
+
             <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
 
                 {{-- ============ KIRI: Alur Pemesanan ============ --}}
@@ -73,11 +95,13 @@
 
                         <div class="space-y-3">
                             @foreach (\App\Services\OrderStatusService::STATUSES as $i => $stage)
-                                @php($isDone = $i < $currentIndex)
-                                @php($isCurrent = $i === $currentIndex)
-                                @php($isNext = $i === $currentIndex + 1)
-                                @php($isReached = $i <= $currentIndex)
-                                @php($history = $statusHistories->where('status', $stage)->sortByDesc('id')->first())
+                                @php
+                                    $isDone = $i < $currentIndex;
+                                    $isCurrent = $i === $currentIndex;
+                                    $isNext = $i === $currentIndex + 1;
+                                    $isReached = $i <= $currentIndex;
+                                    $history = $historyByStatus[$stage] ?? null;
+                                @endphp
 
                                 <div class="rounded-lg border p-4
                                     @if ($isDone) border-green-200 bg-green-50/40 dark:border-green-800 dark:bg-green-950/30
@@ -113,10 +137,10 @@
                                                 @include('orders.partials.stage-summary', ['order' => $order, 'stage' => $stage])
                                             @endif
 
-                                            {{-- Daftar dokumen terlampir (multi) --}}
-                                            @if ($history && $history->documents->count() > 0)
+                                            {{-- Daftar dokumen OrderDocument terlampir (multi) --}}
+                                            @php($docCount = $history?->documents?->count() ?? 0)
+                                            @if ($docCount > 0)
                                                 <div class="mt-2 space-y-1">
-                                                    @php($docCount = $history->documents->count())
                                                     <p class="text-xs text-gray-500 dark:text-slate-400">
                                                         {{ __('Dokumen terlampir (:count/:max)', ['count' => $docCount, 'max' => $maxDocuments]) }}
                                                     </p>
@@ -148,9 +172,9 @@
                                                 </div>
                                             @endif
 
-                                            {{-- Upload dokumen (tahap yang sudah tercapai, selama belum penuh) --}}
+                                            {{-- Upload dokumen OrderDocument (tahap yang sudah tercapai, selama belum penuh) --}}
                                             @if ($isReached)
-                                                @php($existingDocs = $history ? $history->documents->count() : 0)
+                                                @php($existingDocs = $docCount)
                                                 @if ($existingDocs < $maxDocuments)
                                                     <form method="POST" action="{{ route('orders.documents.store', $order) }}"
                                                         enctype="multipart/form-data" class="mt-2 flex flex-wrap items-center gap-2"
@@ -180,7 +204,7 @@
                                             {{-- Form penyelesaian tahap berikutnya --}}
                                             @if ($isNext)
                                                 @php(
-                                                    $providerBandwidth = $stage === 'PO_Vendor' && $order->bandwidth !== null && $order->bandwidth !== ''
+                                                    $providerBandwidth = $stage === 'PO_Vendor' && !empty($order->bandwidth)
                                                         ? (int) $order->bandwidth
                                                         : null
                                                 )
@@ -193,28 +217,50 @@
 
                                                     @include('orders.partials.stage-fields', ['order' => $order, 'stage' => $stage, 'errors' => $errors])
 
-                                                    <div class="mt-3">
+                                                    <div class="mt-3 flex flex-wrap items-center gap-2">
                                                         <button type="submit" :disabled="!ok"
                                                             class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-white transition"
-                                                            :class="!ok ? 'bg-indigo-300 cursor-not-allowed dark:bg-indigo-800' : (bwMismatch ? 'bg-yellow-500 hover:bg-yellow-600 cursor-pointer dark:bg-yellow-500 dark:hover:bg-yellow-400' : 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer dark:bg-indigo-500 dark:hover:bg-indigo-400')">
+                                                            :class="!ok ? 'bg-indigo-300 cursor-not-allowed dark:bg-indigo-800' : (bwMismatch() ? 'bg-yellow-500 hover:bg-yellow-600 cursor-pointer dark:bg-yellow-500 dark:hover:bg-yellow-400' : 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer dark:bg-indigo-500 dark:hover:bg-indigo-400')">
                                                             <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                                                             </svg>
                                                             {{ __('Tandai Selesai') }}
                                                         </button>
-                                                        <p class="mt-1 text-xs text-gray-400 dark:text-slate-500">{{ __('Isi semua field untuk dapat menandai selesai.') }}</p>
 
-                                                        {{-- Peringatan mismatch bandwidth (PO_Provider vs PO_Vendor) --}}
-                                                        <div x-show="bwMismatch" x-cloak
-                                                            class="mt-2 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300">
-                                                            <p class="font-semibold">{{ __('Peringatan: Bandwidth tidak sama') }}</p>
-                                                            <p class="mt-0.5">
-                                                                {{ __('PO Provider') }}: <span class="font-semibold" x-text="providerBw + ' Mbps'"></span>
-                                                                &rarr;
-                                                                {{ __('PO Vendor') }}: <span class="font-semibold" x-text="vendorBw() + ' Mbps'"></span>.
-                                                            </p>
-                                                            <p class="mt-1">{{ __('Nilai berbeda, namun Anda tetap dapat melanjutkan.') }}</p>
-                                                        </div>
+                                                        {{-- Tombol khusus BAA_BAST: Generate dari Template.
+                                                             Submit ke orders.bast.generate (bukan advanceStatus)
+                                                             via atribut HTML5 formaction, membawa nilai
+                                                             baa_number & bast_number dari form yang sama.
+                                                             Tidak advance tahap. --}}
+                                                        @if ($stage === 'BAA_BAST')
+                                                            <button type="submit"
+                                                                formaction="{{ route('orders.bast.generate', $order) }}"
+                                                                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-emerald-600 hover:bg-emerald-700 transition">
+                                                                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                                                </svg>
+                                                                {{ __('Generate dari Template') }}
+                                                            </button>
+                                                        @endif
+                                                    </div>
+                                                    <p class="mt-1 text-xs text-gray-400 dark:text-slate-500">
+                                                        @if ($stage === 'BAA_BAST')
+                                                            {{ __('"Tandai Selesai" akan menyimpan & advance ke tahap berikutnya. "Generate dari Template" hanya generate dokumen (tidak advance).') }}
+                                                        @else
+                                                            {{ __('Isi semua field untuk dapat menandai selesai.') }}
+                                                        @endif
+                                                    </p>
+
+                                                    {{-- Peringatan mismatch bandwidth (PO_Provider vs PO_Vendor) --}}
+                                                    <div x-show="bwMismatch" x-cloak
+                                                        class="mt-2 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300">
+                                                        <p class="font-semibold">{{ __('Peringatan: Bandwidth tidak sama') }}</p>
+                                                        <p class="mt-0.5">
+                                                            {{ __('PO Provider') }}: <span class="font-semibold" x-text="providerBw + ' Mbps'"></span>
+                                                            &rarr;
+                                                            {{ __('PO Vendor') }}: <span class="font-semibold" x-text="vendorBw() + ' Mbps'"></span>.
+                                                        </p>
+                                                        <p class="mt-1">{{ __('Nilai berbeda, namun Anda tetap dapat melanjutkan.') }}</p>
                                                     </div>
                                                 </form>
                                             @endif
